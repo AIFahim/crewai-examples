@@ -1,0 +1,54 @@
+# Environment variables
+.env
+.env.local
+.env.production
+
+# Claude
+.claude/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+logs/
+*.log
+
+# Memory and knowledge base storage
+crew_memory/
+entity_memory/
+knowledge/
+project_memory/
+vector_memory/
+
+# Output directories
+output/
+temp/
+technical_offers/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Distribution
+dist/
+build/
+*.egg-info/
