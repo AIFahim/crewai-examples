@@ -62,11 +62,10 @@ cp .env.example .env
 
 ### Configuration Options
 
-#### Option 1: Azure OpenAI
+#### Option 1: API Configuration
 ```env
-AZURE_OPENAI_API_KEY=your-key-here
-AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
-AZURE_OPENAI_API_VERSION=2024-02-01
+# Add your API credentials to .env file
+# See .env.example for required variables
 ```
 
 #### Option 2: Ollama (Local)
@@ -129,9 +128,9 @@ result = crew.kickoff()
 
 ## 🛠️ Switching Between LLMs
 
-### Using Azure OpenAI
+### Using API Provider
 ```python
-llm="azure/gpt-4o-mini"
+llm="provider/model-name"  # Configure in .env
 ```
 
 ### Using Ollama
