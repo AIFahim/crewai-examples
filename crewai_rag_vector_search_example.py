@@ -3,7 +3,7 @@ CrewAI with RAG and Vector Knowledge Base Example
 Demonstrates integration with vector databases for enhanced knowledge retrieval
 """
 
-from crewai import Agent, Task, Crew, Process
+from crewai import Agent, Task, Crew, Process, LLM
 from crewai.tools import tool
 import os
 import numpy as np
@@ -13,6 +13,15 @@ from dotenv import load_dotenv
 
 # Load environment variables from .env file
 load_dotenv()
+
+# Local Ollama model used by every agent in this example
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:3b")
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+
+
+def ollama_llm(model: str = OLLAMA_MODEL) -> LLM:
+    """Build an LLM pointed at the local Ollama server."""
+    return LLM(model=f"ollama/{model}", base_url=OLLAMA_BASE_URL)
 
 # Simulated Vector Database (in production, use Pinecone, Weaviate, or Chroma)
 class VectorKnowledgeBase:
@@ -133,6 +142,12 @@ def hybrid_knowledge_search(query: str) -> str:
     
     return response
 
+# The @tool decorator binds the Tool object to the *function's* name, while the
+# rest of this module refers to each tool by its registered tool name.
+vector_search = search_vector_knowledge
+add_to_vector_kb = add_to_vector_knowledge
+hybrid_search = hybrid_knowledge_search
+
 # RAG-Enhanced Agent Classes
 class RAGResearchAgent(Agent):
     """Research agent with RAG capabilities"""
@@ -145,7 +160,7 @@ class RAGResearchAgent(Agent):
             capabilities. You use vector embeddings to find the most relevant information
             and augment your responses with retrieved knowledge.""",
             tools=[vector_search, hybrid_search],
-            llm="azure/gpt-4o-mini",
+            llm=ollama_llm(),
             max_iter=3,
             max_retry_limit=2,
             verbose=True
@@ -161,7 +176,7 @@ class KnowledgeContributorAgent(Agent):
             backstory="""You are responsible for adding high-quality information to the
             vector knowledge base. You ensure all contributions are accurate and well-categorized.""",
             tools=[vector_search, add_to_vector_kb],
-            llm="azure/gpt-4o-mini",
+            llm=ollama_llm(),
             max_iter=2,
             max_retry_limit=1,
             verbose=True
@@ -177,7 +192,7 @@ class QAAgent(Agent):
             backstory="""You excel at answering questions by retrieving relevant context
             from the knowledge base and providing comprehensive, accurate answers.""",
             tools=[vector_search, hybrid_search],
-            llm="azure/gpt-4o-mini",
+            llm=ollama_llm(),
             max_iter=2,
             max_retry_limit=1,
             verbose=True
@@ -194,7 +209,7 @@ class ChainOfThoughtRAGAgent(Agent):
             backstory="""You break down complex problems into steps, retrieving relevant
             information for each step to build comprehensive solutions.""",
             tools=[vector_search],
-            llm="azure/gpt-4o",
+            llm=ollama_llm(),
             max_iter=3,
             max_retry_limit=2,
             verbose=True
@@ -298,7 +313,7 @@ if __name__ == "__main__":
     # Example 1: Basic RAG search
     print("\n\nExample 1: Vector Search Demo")
     print("-" * 40)
-    results = vector_search("machine learning training")
+    results = vector_search.run(query="machine learning training")
     print(results)
     
     # Example 2: Research crew
@@ -306,14 +321,14 @@ if __name__ == "__main__":
     print("-" * 40)
     rag_crew = RAGKnowledgeCrew()
     research_crew = rag_crew.create_research_crew()
-    # Uncomment to run: research_crew.kickoff()
+    print(research_crew.kickoff())
     
     # Example 3: Complex analysis
     print("\n\nExample 3: Complex Analysis with RAG")
     print("-" * 40)
     complex_question = "How do agile methodologies apply to ML projects?"
     analysis_crew = rag_crew.create_analysis_crew(complex_question)
-    # Uncomment to run: analysis_crew.kickoff()
+    print(analysis_crew.kickoff())
     
     print("\n\nRAG Benefits:")
     print("1. Semantic search finds conceptually similar content")

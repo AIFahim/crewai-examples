@@ -3,7 +3,8 @@ CrewAI Study Example - Comprehensive Agent Features (Azure OpenAI)
 This example demonstrates all key features of CrewAI agents using Azure OpenAI.
 """
 
-from crewai import Agent, Task, Crew, Process
+from crewai import Agent, Task, Crew, Process, LLM
+from crewai.memory.unified_memory import Memory
 from crewai.tools import tool
 from typing import Optional
 import os
@@ -12,8 +13,28 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
-# Azure OpenAI Configuration is loaded from .env file
-# No need to set environment variables here
+# Local Ollama model used by every agent in this example
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:3b")
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+
+
+def ollama_llm(model: str = OLLAMA_MODEL) -> LLM:
+    """Build an LLM pointed at the local Ollama server."""
+    return LLM(model=f"ollama/{model}", base_url=OLLAMA_BASE_URL)
+
+
+# Memory needs BOTH an embedder (for vector search) and an LLM (for the
+# extraction/recall analysis). Both default to OpenAI, so point each at Ollama.
+MEMORY = Memory(
+    llm=f"ollama/{OLLAMA_MODEL}",
+    embedder={
+        "provider": "ollama",
+        "config": {
+            "url": f"{OLLAMA_BASE_URL}/api/embeddings",
+            "model_name": os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text"),
+        },
+    },
+)
 
 # 1. CUSTOM TOOLS - Define tools that agents can use
 @tool("search_tool")
@@ -59,10 +80,10 @@ class ResearchSpecialistAgent(Agent):
             You excel at finding relevant information and presenting it clearly.
             You always verify facts and provide comprehensive insights.""",
             tools=[search_information],
-            llm="azure/gpt-4o-mini",
+            llm=ollama_llm(),
             max_iter=3,
             max_retry_limit=2,
-            memory=True,
+            memory=MEMORY,
             allow_delegation=True,
             verbose=True
         )
@@ -76,7 +97,7 @@ class DataAnalystAgent(Agent):
             and finding patterns. You can break down complex information into
             understandable insights.""",
             tools=[calculate],
-            llm="azure/gpt-4o-mini",
+            llm=ollama_llm(),
             max_iter=2,
             max_retry_limit=1,
             allow_delegation=False,
@@ -91,7 +112,7 @@ class ContentWriterAgent(Agent):
             backstory="""You are a talented writer who can transform complex information
             into easy-to-understand content. You focus on clarity and engagement.""",
             tools=[],
-            llm="azure/gpt-4o-mini",
+            llm=ollama_llm(),
             max_iter=2,
             max_retry_limit=1,
             allow_delegation=True,
@@ -107,7 +128,7 @@ class ProjectManagerAgent(Agent):
             collaboration between team members. You delegate tasks effectively
             and ensure project success.""",
             tools=[],
-            llm="azure/gpt-4o",
+            llm=ollama_llm(),
             max_iter=1,
             max_retry_limit=1,
             allow_delegation=True,
@@ -183,7 +204,7 @@ hierarchical_crew = Crew(
     agents=[manager_agent, research_agent, analysis_agent, writer_agent],
     tasks=[research_task, analysis_task, writing_task],
     process=Process.hierarchical,
-    manager_llm="azure/gpt-4o-mini",  # Manager's LLM
+    manager_llm=ollama_llm(),  # Manager's LLM
     verbose=True,
 )
 
@@ -196,7 +217,7 @@ class TimeConstrainedAgent(Agent):
             role='Fast Worker',
             goal='Complete tasks quickly and efficiently',
             backstory='You work under tight deadlines and must be efficient.',
-            llm="azure/gpt-4o-mini",
+            llm=ollama_llm(),
             max_iter=1,
             max_retry_limit=1,
             execution_timeout=30,  # 30 seconds timeout
@@ -212,7 +233,7 @@ class SpecializedPythonAgent(Agent):
             system_template="""You are a Python programming expert.
             Always provide code examples when explaining concepts.
             Focus on best practices and clean code principles.""",
-            llm="azure/gpt-4o",
+            llm=ollama_llm(),
             max_iter=2,
             max_retry_limit=1,
             verbose=True

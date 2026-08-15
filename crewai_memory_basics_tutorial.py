@@ -3,7 +3,8 @@ CrewAI Memory Layers - Simple Demo for Students
 Shows how agents remember information and learn from past interactions
 """
 
-from crewai import Agent, Task, Crew, Process
+from crewai import Agent, Task, Crew, Process, LLM
+from crewai.memory.unified_memory import Memory
 from crewai.tools import tool
 import os
 from datetime import datetime
@@ -11,6 +12,30 @@ from dotenv import load_dotenv
 
 # Load environment variables from .env file
 load_dotenv()
+
+# Local Ollama model used by every agent in this example
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:3b")
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+OLLAMA_EMBED_MODEL = os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text")
+
+
+def ollama_llm(model: str = OLLAMA_MODEL) -> LLM:
+    """Build an LLM pointed at the local Ollama server."""
+    return LLM(model=f"ollama/{model}", base_url=OLLAMA_BASE_URL)
+
+
+# Memory needs BOTH an embedder (for vector search) and an LLM (for the
+# extraction/recall analysis). Both default to OpenAI, so point each at Ollama
+# and share one store across every agent and crew below.
+OLLAMA_EMBEDDER = {
+    "provider": "ollama",
+    "config": {
+        "url": f"{OLLAMA_BASE_URL}/api/embeddings",
+        "model_name": OLLAMA_EMBED_MODEL,
+    },
+}
+
+MEMORY = Memory(llm=f"ollama/{OLLAMA_MODEL}", embedder=OLLAMA_EMBEDDER)
 
 # Simple memory storage tool
 memory_store = {}
@@ -40,10 +65,10 @@ class MemoryAssistantAgent(Agent):
             goal="Remember important information and use it in future tasks",
             backstory="You have an excellent memory and never forget important details.",
             tools=[store_information, recall_information],
-            llm="azure/gpt-4o-mini",
+            llm=ollama_llm(),
             max_iter=1,
             max_retry_limit=1,
-            memory=True,
+            memory=MEMORY,
             verbose=True
         )
 
@@ -53,10 +78,10 @@ class LearningAssistantAgent(Agent):
             role="Learning Assistant",
             goal="Learn from past experiences and improve responses",
             backstory="You continuously learn and adapt based on previous interactions.",
-            llm="azure/gpt-4o-mini",
+            llm=ollama_llm(),
             max_iter=1,
             max_retry_limit=1,
-            memory=True,
+            memory=MEMORY,
             verbose=True
         )
 
@@ -87,7 +112,7 @@ basic_crew = Crew(
     agents=[memory_agent],
     tasks=[store_task, recall_task],
     process=Process.sequential,
-    memory=True,  # Enable memory for the crew
+    memory=MEMORY,  # Enable memory for the crew
     verbose=True
 )
 
@@ -118,7 +143,7 @@ learning_crew = Crew(
     agents=[learning_agent],
     tasks=[task1, task2, task3],
     process=Process.sequential,
-    memory=True,  # Enable memory
+    memory=MEMORY,  # Enable memory
     verbose=True
 )
 
@@ -132,10 +157,10 @@ class PersistentProjectAgent(Agent):
             role="Project Manager",
             goal="Manage project information across multiple sessions",
             backstory="You maintain project continuity across different work sessions.",
-            llm="azure/gpt-4o-mini",
+            llm=ollama_llm(),
             max_iter=1,
             max_retry_limit=1,
-            memory=True,
+            memory=MEMORY,
             verbose=True
         )
 
@@ -152,7 +177,7 @@ persistent_crew = Crew(
     agents=[persistent_agent],
     tasks=[project_task],
     process=Process.sequential,
-    memory=True,  # Enable memory
+    memory=MEMORY,  # Enable memory
     verbose=True
 )
 
@@ -162,11 +187,11 @@ if __name__ == "__main__":
     print("=" * 50)
     
     # Run basic memory example
-    # basic_crew.kickoff()
-    
+    basic_crew.kickoff()
+
     # Run learning example
-    # learning_crew.kickoff()
-    
+    learning_crew.kickoff()
+
     # Run persistent memory example
     persistent_crew.kickoff()
     

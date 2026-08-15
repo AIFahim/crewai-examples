@@ -3,11 +3,11 @@ CrewAI Memory Layers and Knowledge Base Example (Azure OpenAI)
 Demonstrates all memory types and knowledge base integration in CrewAI
 """
 
-from crewai import Agent, Task, Crew, Process
+from crewai import Agent, Task, Crew, Process, LLM
+from crewai.memory.unified_memory import Memory
 from crewai.tools import tool
-from crewai.memory import ShortTermMemory, LongTermMemory, EntityMemory
-from crewai.knowledge import Document, KnowledgeBase
 import os
+from dataclasses import dataclass, field
 from typing import List
 import json
 from datetime import datetime
@@ -15,6 +15,44 @@ from dotenv import load_dotenv
 
 # Load environment variables from .env file
 load_dotenv()
+
+# Local Ollama model used by every agent in this example
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:3b")
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+OLLAMA_EMBED_MODEL = os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text")
+
+
+def ollama_llm(model: str = OLLAMA_MODEL) -> LLM:
+    """Build an LLM pointed at the local Ollama server."""
+    return LLM(model=f"ollama/{model}", base_url=OLLAMA_BASE_URL)
+
+
+# Memory needs BOTH an embedder (for vector search) and an LLM (for the
+# extraction/recall analysis). Both default to OpenAI, so point each at Ollama
+# and share one store across every agent and crew below.
+OLLAMA_EMBEDDER = {
+    "provider": "ollama",
+    "config": {
+        "url": f"{OLLAMA_BASE_URL}/api/embeddings",
+        "model_name": OLLAMA_EMBED_MODEL,
+    },
+}
+
+MEMORY = Memory(llm=f"ollama/{OLLAMA_MODEL}", embedder=OLLAMA_EMBEDDER)
+
+
+@dataclass
+class Document:
+    """A knowledge-base record.
+
+    CrewAI used to export this from crewai.knowledge; current versions no
+    longer do, so this example carries its own minimal version.
+    """
+
+    title: str
+    content: str
+    metadata: dict = field(default_factory=dict)
+    created_at: str = ""
 
 # 1. KNOWLEDGE BASE SETUP
 class ProjectKnowledgeBase:
@@ -111,6 +149,10 @@ def remember_important_info(info: str) -> str:
     # This simulates storing in agent's memory
     return f"Remembered: {info}"
 
+# The @tool decorator binds the Tool object to the *function's* name, while the
+# agents below refer to this tool by its registered tool name.
+remember_context = remember_important_info
+
 # 3. MEMORY-AWARE AGENT CLASSES
 class ResearchAgentWithMemory(Agent):
     """Research agent with enhanced memory capabilities"""
@@ -123,10 +165,10 @@ class ResearchAgentWithMemory(Agent):
             You remember all previous research findings and build upon past knowledge.
             You actively use the knowledge base to store and retrieve information.""",
             tools=[search_knowledge, add_to_knowledge, remember_context],
-            llm="azure/gpt-4o-mini",
+            llm=ollama_llm(),
             max_iter=3,
             max_retry_limit=2,
-            memory=True,
+            memory=MEMORY,
             verbose=True
         )
 
@@ -141,10 +183,10 @@ class LearningAgent(Agent):
             You remember past conversations, learn from mistakes, and continuously
             improve your knowledge base.""",
             tools=[search_knowledge, remember_context],
-            llm="azure/gpt-4o-mini",
+            llm=ollama_llm(),
             max_iter=2,
             max_retry_limit=1,
-            memory=True,
+            memory=MEMORY,
             verbose=True
         )
 
@@ -159,10 +201,10 @@ class KnowledgeManagerAgent(Agent):
             knowledge repository. You ensure information is properly stored,
             categorized, and easily retrievable.""",
             tools=[search_knowledge, add_to_knowledge],
-            llm="azure/gpt-4o-mini",
+            llm=ollama_llm(),
             max_iter=2,
             max_retry_limit=1,
-            memory=True,
+            memory=MEMORY,
             verbose=True
         )
 
@@ -181,7 +223,9 @@ class MemoryEnhancedCrew:
             agents=[self.research_agent, self.learning_agent],
             tasks=tasks,
             process=Process.sequential,
-            memory=ShortTermMemory(),  # Remembers within session
+            # Current CrewAI unifies the old ShortTermMemory/LongTermMemory/
+            # EntityMemory classes behind a single Memory instance.
+            memory=MEMORY,  # Remembers within session
             verbose=True
         )
     
@@ -191,9 +235,9 @@ class MemoryEnhancedCrew:
             agents=[self.research_agent, self.learning_agent, self.knowledge_manager],
             tasks=tasks,
             process=Process.sequential,
-            memory=LongTermMemory(
-                storage_path="./crew_memory"  # Persists between sessions
-            ),
+            # Persistence location is set with the CREWAI_STORAGE_DIR env var
+            # rather than a per-crew storage_path.
+            memory=MEMORY,
             verbose=True
         )
     
@@ -203,9 +247,8 @@ class MemoryEnhancedCrew:
             agents=[self.research_agent, self.knowledge_manager],
             tasks=tasks,
             process=Process.sequential,
-            memory=EntityMemory(
-                storage_path="./entity_memory"  # Tracks entities like people, projects
-            ),
+            # Entity tracking is part of the same unified memory store.
+            memory=MEMORY,
             verbose=True
         )
 
@@ -254,10 +297,10 @@ class ConversationalAgentWithMemory(Agent):
             goal="Maintain context across conversations and remember user preferences",
             backstory="""You are a helpful assistant who remembers past conversations,
             user preferences, and builds relationships over time.""",
-            llm="azure/gpt-4o-mini",
+            llm=ollama_llm(),
             max_iter=1,
             max_retry_limit=1,
-            memory=True,
+            memory=MEMORY,
             verbose=True
         )
 
@@ -284,7 +327,7 @@ def demonstrate_conversation_memory():
         agents=[agent],
         tasks=[task1, task2],
         process=Process.sequential,
-        memory=ShortTermMemory(),
+        memory=MEMORY,
         verbose=True
     )
     
@@ -302,19 +345,19 @@ if __name__ == "__main__":
     tasks = create_memory_demo_tasks()
     
     short_term_crew = memory_crew.create_crew_with_short_term_memory(tasks[:2])
-    # Uncomment to run: results = short_term_crew.kickoff()
+    print(short_term_crew.kickoff())
     
     # Example 2: Long-term memory demo
     print("\n2. LONG-TERM MEMORY DEMO")
     print("-" * 30)
     long_term_crew = memory_crew.create_crew_with_long_term_memory(tasks)
-    # Uncomment to run: results = long_term_crew.kickoff()
+    print(long_term_crew.kickoff())
     
     # Example 3: Conversation memory
     print("\n3. CONVERSATION MEMORY DEMO")
     print("-" * 30)
     conversation_crew = demonstrate_conversation_memory()
-    # Uncomment to run: results = conversation_crew.kickoff()
+    print(conversation_crew.kickoff())
     
     # Example 4: Knowledge base search
     print("\n4. KNOWLEDGE BASE DEMO")

@@ -3,7 +3,7 @@ CrewAI Memory Example - Without Embeddings
 Simple demonstration of agent memory without requiring vector embeddings
 """
 
-from crewai import Agent, Task, Crew, Process
+from crewai import Agent, Task, Crew, Process, LLM
 from crewai.tools import tool
 import os
 from datetime import datetime
@@ -11,6 +11,15 @@ from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
+
+# Local Ollama model used by every agent in this example
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:3b")
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+
+
+def ollama_llm(model: str = OLLAMA_MODEL) -> LLM:
+    """Build an LLM pointed at the local Ollama server."""
+    return LLM(model=f"ollama/{model}", base_url=OLLAMA_BASE_URL)
 
 # Simple in-memory storage
 conversation_history = []
@@ -39,7 +48,7 @@ class ConversationAgent(Agent):
             backstory="""You are a helpful assistant who pays attention to details
             and remembers important information shared during conversations.""",
             tools=[log_interaction, recall_history],
-            llm="azure/gpt-4o-mini",
+            llm=ollama_llm(),
             max_iter=1,
             max_retry_limit=1,
             verbose=True

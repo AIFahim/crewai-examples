@@ -55,6 +55,7 @@ class AnalystAgent(Agent):
                 model="ollama/llama3.2:1b",
                 base_url="http://localhost:11434"
             ),
+            # llm="azure/gpt-4o-mini",
             max_iter=1,
             max_retry_limit=1,
             verbose=True
@@ -66,7 +67,10 @@ class WriterAgent(Agent):
             role='Writer',
             goal='Create clear summaries',
             backstory='You write concise and easy-to-understand content.',
-            llm="azure/gpt-4o-mini",
+            llm=LLM(
+                model="ollama/llama3.2:1b",
+                base_url="http://localhost:11434"
+            ),
             max_iter=1,
             max_retry_limit=1,
             verbose=True
